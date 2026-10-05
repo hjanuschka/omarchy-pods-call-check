@@ -537,7 +537,7 @@ Panel {
             }
             Button {
               width: parent.width
-              text: "Music - stereo playback"
+              text: "Music"
               foreground: root.foreground
               fontFamily: root.fontFamily
               leftAlign: true
@@ -549,7 +549,7 @@ Panel {
             }
             Button {
               width: parent.width
-              text: "Call - mic + mono playback"
+              text: "Call"
               foreground: root.foreground
               fontFamily: root.fontFamily
               leftAlign: true
