@@ -79,7 +79,8 @@ def select_mode(mode):
     previous_sink = pactl("get-default-sink")
     previous_source = pactl("get-default-source")
     try:
-        pactl("set-card-profile", name, profile)
+        if mode == "music":
+            pactl("set-card-profile", name, profile)
         for _ in range(20):
             sink = next(iter(nodes("sinks", name)), None)
             source = next(iter(nodes("sources", name)), None)
@@ -93,10 +94,12 @@ def select_mode(mode):
         if mode == "call":
             subprocess.run(("/usr/bin/omarchy-audio-input-set-default",
                             str(source["properties"]["object.id"]), source["name"]), check=True, timeout=10)
-        return f"AirPods {mode} mode selected ({profile})"
+        if mode == "call":
+            return "AirPods mic selected; call audio starts when the mic opens"
+        return f"AirPods music mode selected ({profile})"
     except (ValueError, RuntimeError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired, OSError, KeyError):
-        if previous != profile:
+        if mode == "music" and previous != profile:
             restore_profile(name, previous, previous_sink)
         pactl("set-default-source", previous_source)
         raise

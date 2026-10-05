@@ -66,6 +66,7 @@ Panel {
   property string callCheckStatus: ""
   property string callCheckError: ""
   property string audioProfile: ""
+  property string requestedAudioMode: ""
   property string profileMessage: ""
   property string profileError: ""
   readonly property string callCheckScript: decodeURIComponent(String(Qt.resolvedUrl("bin/call-check.py")).replace(/^file:\/\//, ""))
@@ -116,7 +117,10 @@ Panel {
     }
     onExited: function(code) {
       if (code !== 0) root.profileMessage = root.profileError || "Profile switch failed"
-      else root.profileError = ""
+      else {
+        root.profileError = ""
+        root.requestedAudioMode = root.profileSelectProcess.command[3]
+      }
       Qt.callLater(root.refreshAudioProfile)
     }
   }
@@ -541,7 +545,8 @@ Panel {
               foreground: root.foreground
               fontFamily: root.fontFamily
               leftAlign: true
-              selected: root.audioProfile.indexOf("a2dp-sink") === 0
+              selected: root.requestedAudioMode === "music"
+                || (root.requestedAudioMode === "" && root.audioProfile.indexOf("a2dp-sink") === 0)
               hasCursor: root.rowHasCursor("music")
               enabled: pods.connected && !profileSelectProcess.running && !callCheck.running
               onHovered: function(hovered) { if (hovered) root.focusRow("music") }
@@ -553,7 +558,8 @@ Panel {
               foreground: root.foreground
               fontFamily: root.fontFamily
               leftAlign: true
-              selected: root.audioProfile.indexOf("headset-head-unit") === 0
+              selected: root.requestedAudioMode === "call"
+                || (root.requestedAudioMode === "" && root.audioProfile.indexOf("headset-head-unit") === 0)
               hasCursor: root.rowHasCursor("call-profile")
               enabled: pods.connected && !profileSelectProcess.running && !callCheck.running
               onHovered: function(hovered) { if (hovered) root.focusRow("call-profile") }

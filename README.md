@@ -60,12 +60,12 @@ the opening and the following audio connection into one card.
 
 ## Audio profiles and call check
 
-With AirPods connected, the bar panel offers **Music** (stereo A2DP playback)
-and **Call** (AirPods mic plus mono headset playback). Switching selects the
-AirPods as output and, for Call, as input. Music does not change the saved
-input. Existing calls may be interrupted by switching modes; the daemon may
-also select its preferred playback codec after Music is chosen. Other audio
-devices remain managed by Omarchy Audio.
+With AirPods connected, the bar panel offers **Music** and **Call**. Music
+selects A2DP stereo playback. Call selects the AirPods output and microphone
+but leaves A2DP active until an app records, when WirePlumber switches to
+mono headset audio. Music does not change the saved input. Switching to Music
+during a call interrupts its microphone; the daemon may select its preferred
+playback codec afterward. Other audio devices remain managed by Omarchy Audio.
 
 **Record and replay mic** captures eight seconds from the AirPods microphone
 and plays them back through the same headset. The temporary WAV is deleted

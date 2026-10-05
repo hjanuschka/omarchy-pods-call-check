@@ -45,8 +45,7 @@ class CallCheckTest(unittest.TestCase):
                                                             "media.class": "Audio/Source",
                                                             "object.id": "42"}}]
         call_check.select_mode("call")
-        pactl.assert_any_call("set-card-profile", self.card["name"],
-                              "headset-head-unit-msbc")
+        self.assertFalse(any(call.args[0] == "set-card-profile" for call in pactl.call_args_list))
         self.assertEqual(len(run.call_args_list), 2)
         self.assertIn("audio-input", run.call_args_list[1].args[0][0])
 
@@ -67,11 +66,11 @@ class CallCheckTest(unittest.TestCase):
     @patch.object(call_check, "nodes", return_value=[])
     @patch.object(call_check, "pactl", side_effect=lambda *args: "speaker" if args[0] == "get-default-sink" else "mic")
     @patch.object(call_check, "headset")
-    def test_failed_selection_restores_previous_profile(self, headset, pactl, _nodes, _sleep):
+    def test_failed_call_selection_preserves_music_profile(self, headset, pactl, _nodes, _sleep):
         headset.return_value = self.card
         with self.assertRaisesRegex(RuntimeError, "did not appear"):
             call_check.select_mode("call")
-        pactl.assert_any_call("set-card-profile", self.card["name"], "a2dp-sink")
+        self.assertFalse(any(call.args[0] == "set-card-profile" for call in pactl.call_args_list))
         pactl.assert_any_call("set-default-source", "mic")
 
     @patch.object(call_check.time, "sleep")
