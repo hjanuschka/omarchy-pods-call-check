@@ -58,15 +58,20 @@ trigger it before audio connects, so a shell restart with an already-open case
 stays quiet. Battery updates do not replay it, and a 15-second cooldown merges
 the opening and the following audio connection into one card.
 
-## Call check
+## Audio profiles and call check
 
-With AirPods connected, open the bar panel and choose **Record and replay mic**.
-Speak for eight seconds; the recording plays back through the same AirPods.
-The temporary WAV is deleted when the check finishes. Run it outside a call:
-it briefly uses the Bluetooth headset profile and then restores the previous
-playback profile and output device. Bluetooth call audio is mono, not A2DP
-stereo. A failed capture reports the stalled transport instead of claiming the
-microphone worked. Input and output device selection remain in Omarchy Audio.
+With AirPods connected, the bar panel offers **Music** (stereo A2DP playback)
+and **Call** (AirPods mic plus mono headset playback). Switching selects the
+AirPods as output and, for Call, as input. Music does not change the saved
+input. Existing calls may be interrupted by switching modes; the daemon may
+also select its preferred playback codec after Music is chosen. Other audio
+devices remain managed by Omarchy Audio.
+
+**Record and replay mic** captures eight seconds from the AirPods microphone
+and plays them back through the same headset. The temporary WAV is deleted
+when the check finishes. Run it outside a call: it briefly selects the
+headset profile, then restores the previous playback profile and output.
+A failed capture reports the stalled transport instead of claiming success.
 
 ## What it shows
 

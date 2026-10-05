@@ -65,18 +65,64 @@ Panel {
   property bool cursorActive: false
   property string callCheckStatus: ""
   property string callCheckError: ""
+  property string audioProfile: ""
+  property string profileMessage: ""
+  property string profileError: ""
   readonly property string callCheckScript: decodeURIComponent(String(Qt.resolvedUrl("bin/call-check.py")).replace(/^file:\/\//, ""))
 
+  function refreshAudioProfile() {
+    if (pods.connected && !profileStatusProcess.running && !profileSelectProcess.running)
+      profileStatusProcess.running = true
+  }
+
+  function selectAudioMode(mode) {
+    if (!pods.connected || callCheck.running || profileSelectProcess.running) return
+    profileMessage = "Switching to " + mode + "..."
+    profileError = ""
+    profileSelectProcess.command = ["/usr/bin/python3", callCheckScript, "select", mode]
+    profileSelectProcess.running = true
+  }
+
   function checkCall() {
-    if (!pods.connected || callCheck.running) return
+    if (!pods.connected || callCheck.running || profileSelectProcess.running) return
     callCheckStatus = "Recording from AirPods for eight seconds, then playing it back..."
     callCheckError = ""
     callCheck.running = true
   }
 
+  Timer {
+    interval: 1500
+    repeat: true
+    running: root.opened && pods.connected
+    onTriggered: root.refreshAudioProfile()
+  }
+  Process {
+    id: profileStatusProcess
+    command: ["/usr/bin/python3", root.callCheckScript, "status"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.audioProfile = text.trim()
+    }
+  }
+  Process {
+    id: profileSelectProcess
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if (text.trim()) root.profileMessage = text.trim()
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.profileError = text.trim()
+    }
+    onExited: function(code) {
+      if (code !== 0) root.profileMessage = root.profileError || "Profile switch failed"
+      else root.profileError = ""
+      Qt.callLater(root.refreshAudioProfile)
+    }
+  }
   Process {
     id: callCheck
-    command: ["/usr/bin/python3", root.callCheckScript]
+    command: ["/usr/bin/python3", root.callCheckScript, "test"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: if (text.trim()) root.callCheckStatus = text.trim()
@@ -145,7 +191,7 @@ Panel {
     if (caVisible) rows.push("ca")
     if (oneBudVisible) rows.push("onebud")
     rows.push("ear")
-    if (pods.connected) rows.push("call")
+    if (pods.connected) rows.push("music", "call-profile", "call")
     return rows
   }
 
@@ -174,6 +220,8 @@ Panel {
     else if (name === "onebud") pods.setOneBudANC(!pods.oneBudANC)
     else if (name === "ear") pods.cycleEarDetection()
     else if (name === "call") root.checkCall()
+    else if (name === "music") root.selectAudioMode("music")
+    else if (name === "call-profile") root.selectAudioMode("call")
     else if (name === "connection") pods.toggleConnection()
   }
 
@@ -193,6 +241,7 @@ Panel {
     cursorIndex = 0
     if (panelFlick) panelFlick.contentY = 0
     pods.refresh()
+    refreshAudioProfile()
     Qt.callLater(function () { keyCatcher.forceActiveFocus() })
   }
 
@@ -472,6 +521,53 @@ Panel {
               rowName: "ear"
               label: "Ear detection"
               value: Model.earDetectionName(pods.earDetectionBehavior)
+            }
+          }
+
+          Column {
+            visible: pods.connected || profileSelectProcess.running || root.profileMessage !== ""
+            width: parent.width
+            spacing: Style.space(8)
+
+            PanelSeparator { foreground: root.foreground }
+            PanelSectionHeader {
+              text: "AUDIO PROFILE"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+            Button {
+              width: parent.width
+              text: "Music - stereo playback"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              leftAlign: true
+              selected: root.audioProfile.indexOf("a2dp-sink") === 0
+              hasCursor: root.rowHasCursor("music")
+              enabled: pods.connected && !profileSelectProcess.running && !callCheck.running
+              onHovered: function(hovered) { if (hovered) root.focusRow("music") }
+              onClicked: root.selectAudioMode("music")
+            }
+            Button {
+              width: parent.width
+              text: "Call - mic + mono playback"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              leftAlign: true
+              selected: root.audioProfile.indexOf("headset-head-unit") === 0
+              hasCursor: root.rowHasCursor("call-profile")
+              enabled: pods.connected && !profileSelectProcess.running && !callCheck.running
+              onHovered: function(hovered) { if (hovered) root.focusRow("call-profile") }
+              onClicked: root.selectAudioMode("call")
+            }
+            Text {
+              width: parent.width
+              visible: root.profileMessage !== ""
+              text: root.profileMessage
+              color: root.profileError ? root.urgent : root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              textFormat: Text.PlainText
+              wrapMode: Text.WordWrap
             }
           }
 
