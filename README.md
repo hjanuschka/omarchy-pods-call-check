@@ -58,6 +58,16 @@ trigger it before audio connects, so a shell restart with an already-open case
 stays quiet. Battery updates do not replay it, and a 15-second cooldown merges
 the opening and the following audio connection into one card.
 
+## Call check
+
+With AirPods connected, open the bar panel and choose **Record and replay mic**.
+Speak for eight seconds; the recording plays back through the same AirPods.
+The temporary WAV is deleted when the check finishes. Run it outside a call:
+it briefly uses the Bluetooth headset profile and then restores the previous
+playback profile and output device. Bluetooth call audio is mono, not A2DP
+stereo. A failed capture reports the stalled transport instead of claiming the
+microphone worked. Input and output device selection remain in Omarchy Audio.
+
 ## What it shows
 
 - **Battery** for the left pod, the right pod and the case, each with a charging

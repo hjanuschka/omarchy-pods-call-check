@@ -63,6 +63,33 @@ Panel {
 
   property int cursorIndex: 0
   property bool cursorActive: false
+  property string callCheckStatus: ""
+  property string callCheckError: ""
+  readonly property string callCheckScript: decodeURIComponent(String(Qt.resolvedUrl("bin/call-check.py")).replace(/^file:\/\//, ""))
+
+  function checkCall() {
+    if (!pods.connected || callCheck.running) return
+    callCheckStatus = "Recording from AirPods for eight seconds, then playing it back..."
+    callCheckError = ""
+    callCheck.running = true
+  }
+
+  Process {
+    id: callCheck
+    command: ["/usr/bin/python3", root.callCheckScript]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if (text.trim()) root.callCheckStatus = text.trim()
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.callCheckError = text.trim()
+    }
+    onExited: function(code) {
+      if (code !== 0) root.callCheckStatus = root.callCheckError || "Call check failed"
+      else root.callCheckError = ""
+    }
+  }
 
   readonly property bool hideWhenDisconnected: setting("hideWhenDisconnected", false) === true
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -118,6 +145,7 @@ Panel {
     if (caVisible) rows.push("ca")
     if (oneBudVisible) rows.push("onebud")
     rows.push("ear")
+    if (pods.connected) rows.push("call")
     return rows
   }
 
@@ -145,6 +173,7 @@ Panel {
     else if (name === "ca") pods.setConversationalAwareness(!pods.conversationalAwareness)
     else if (name === "onebud") pods.setOneBudANC(!pods.oneBudANC)
     else if (name === "ear") pods.cycleEarDetection()
+    else if (name === "call") root.checkCall()
     else if (name === "connection") pods.toggleConnection()
   }
 
@@ -443,6 +472,54 @@ Panel {
               rowName: "ear"
               label: "Ear detection"
               value: Model.earDetectionName(pods.earDetectionBehavior)
+            }
+          }
+
+          Column {
+            visible: pods.connected || callCheck.running || root.callCheckStatus !== ""
+            width: parent.width
+            spacing: Style.space(8)
+
+            PanelSeparator { foreground: root.foreground }
+            PanelSectionHeader {
+              text: "CALL CHECK"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+            CursorSurface {
+              width: parent.width
+              implicitHeight: callCheckLabel.implicitHeight + Style.spacing.rowPaddingX
+              foreground: root.foreground
+              hasCursor: root.rowHasCursor("call")
+              opacity: callCheck.running ? 0.6 : 1.0
+
+              Text {
+                id: callCheckLabel
+                anchors.centerIn: parent
+                text: callCheck.running ? "Testing AirPods mic..." : "Record and replay mic (8 seconds)"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                textFormat: Text.PlainText
+              }
+              MouseArea {
+                anchors.fill: parent
+                enabled: pods.connected && !callCheck.running
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onEntered: root.focusRow("call")
+                onClicked: root.checkCall()
+              }
+            }
+            Text {
+              width: parent.width
+              visible: root.callCheckStatus !== ""
+              text: root.callCheckStatus
+              color: root.callCheckError ? root.urgent : root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              textFormat: Text.PlainText
+              wrapMode: Text.WordWrap
             }
           }
 
