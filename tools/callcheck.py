@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
 )
 
 HIRES_SOURCE = "AirPodsHiRes"
+# The same uplink with RNNoise over it, which is the one to use on a call.
+CLEAN_SOURCE = "AirPodsClean"
 RECORD_SECONDS = 4
 
 
@@ -72,6 +74,7 @@ class Readiness:
     default_sink: str
     card_profile: str
     hires_published: bool
+    clean_published: bool
     mic_enabled: bool | None
     mic_active: bool | None
     model: str
@@ -81,10 +84,10 @@ class Readiness:
         out = []
         if self.default_source.startswith("bluez_input."):
             out.append("The AirPods HFP mic is your input: joining a call drops music to 16 kHz mono.")
-        elif self.default_source == HIRES_SOURCE and not self.hires_published:
-            out.append(f"{HIRES_SOURCE} is selected but not published: the daemon may be down.")
-        elif self.default_source != HIRES_SOURCE and self.hires_published:
-            out.append(f"{HIRES_SOURCE} is available but something else is your input.")
+        elif self.default_source == HIRES_SOURCE and self.clean_published:
+            out.append(f"{CLEAN_SOURCE} exists and suppresses room noise; the raw uplink is selected.")
+        elif self.default_source not in (HIRES_SOURCE, CLEAN_SOURCE) and self.hires_published:
+            out.append("The AirPods microphone is available but something else is your input.")
         if self.mic_enabled is False:
             out.append("The AirPods microphone is switched off in the panel.")
         if self.card_profile.startswith("headset"):
@@ -119,6 +122,7 @@ def read_state() -> Readiness:
         default_sink=run(["pactl", "get-default-sink"]).strip(),
         card_profile=profile,
         hires_published=HIRES_SOURCE in sources,
+        clean_published=CLEAN_SOURCE in sources,
         mic_enabled=status.get("hires_mic_enabled"),
         mic_active=status.get("hires_mic_active"),
         model=status.get("model_name", ""),
@@ -216,6 +220,7 @@ class CallCheck(QWidget):
         self.record_button = QPushButton(f"Record {RECORD_SECONDS}s, play back")
         self.record_button.clicked.connect(self.record_and_play)
         self.fix_button = QPushButton("Use the AirPods mic")
+        self.fix_button.setToolTip("Prefers the noise-suppressed source when it exists")
         self.fix_button.clicked.connect(self.use_hires)
         self.play_button = QPushButton("Play piano loop")
         self.play_button.setCheckable(True)
@@ -265,7 +270,8 @@ class CallCheck(QWidget):
             + ("" if state.mic_enabled is None else f", switch {'on' if state.mic_enabled else 'off'}"),
         ]
         self.detail.setText("\n".join(lines + [""] + [f"- {p}" for p in problems]))
-        self.fix_button.setEnabled(state.hires_published and state.default_source != HIRES_SOURCE)
+        best = CLEAN_SOURCE if state.clean_published else HIRES_SOURCE
+        self.fix_button.setEnabled(state.hires_published and state.default_source != best)
 
     def toggle_piano(self, playing: bool) -> None:
         if not playing:
@@ -294,7 +300,9 @@ class CallCheck(QWidget):
         super().closeEvent(event)
 
     def use_hires(self) -> None:
-        subprocess.run(["pactl", "set-default-source", HIRES_SOURCE], capture_output=True)
+        state = read_state()
+        wanted = CLEAN_SOURCE if state.clean_published else HIRES_SOURCE
+        subprocess.run(["pactl", "set-default-source", wanted], capture_output=True)
         self.refresh()
 
     def record_and_play(self) -> None:

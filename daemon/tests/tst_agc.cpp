@@ -30,24 +30,40 @@ class TestAgc : public QObject
     Q_OBJECT
 
 private slots:
-    void liftsAQuietFrameTowardsTheTarget();
+    void liftsSpeechTowardsTheTarget();
+    void leavesTheNoiseFloorAlone();
     void doesNotLiftAnAlreadyLoudFrame();
     void neverExceedsItsGainCeiling();
     void keepsLoudInputInRange();
 };
 
-void TestAgc::liftsAQuietFrameTowardsTheTarget()
+void TestAgc::liftsSpeechTowardsTheTarget()
 {
     // The measured uplink sits far below the target, which is the whole reason this exists.
-    QList<qint16> quiet = tone(0.01);
-    const double before = rms(quiet);
+    QList<qint16> speech = tone(0.05);
+    const double before = rms(speech);
     Agc agc;
     for (int frame = 0; frame < 40; ++frame) {
-        quiet = tone(0.01);
-        agc.process(quiet.data(), quiet.size());
+        speech = tone(0.05);
+        agc.process(speech.data(), speech.size());
     }
-    QVERIFY2(rms(quiet) > before * 2.0, "a quiet frame should end up louder");
+    QVERIFY2(rms(speech) > before * 2.0, "speech should end up louder");
     QVERIFY(agc.gain() > 1.0f);
+}
+
+void TestAgc::leavesTheNoiseFloorAlone()
+{
+    // Measured on the device: silence came back at the same level as speech, because the gain
+    // rode up to its ceiling whenever nobody was talking and lifted the fans with it.
+    QList<qint16> room = tone(0.004);
+    const double before = rms(room);
+    Agc agc;
+    for (int frame = 0; frame < 200; ++frame) {
+        room = tone(0.004);
+        agc.process(room.data(), room.size());
+    }
+    QVERIFY2(rms(room) < before * 1.5,
+             qPrintable(QStringLiteral("room tone was lifted from %1 to %2").arg(before).arg(rms(room))));
 }
 
 void TestAgc::doesNotLiftAnAlreadyLoudFrame()

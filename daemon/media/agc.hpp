@@ -20,7 +20,12 @@ namespace OpenPods::HiRes
                 // Rising level is followed quickly so a syllable is not clipped; falling level
                 // is followed slowly so a pause does not pump the gain up to the noise floor.
                 m_envelope += (level - m_envelope) * (level > m_envelope ? kAttack : kRelease);
-                const float desired = std::min(kTarget / std::max(m_envelope, 1e-4f), kMaxGain);
+                // Below the gate the frame is room tone, and lifting it is what turns a pause
+                // into audible fans. Measured on the device: the ceiling gain reached silence
+                // within milliseconds and speech and silence arrived at the same level.
+                const float desired = m_envelope < kGate
+                                          ? 1.0f
+                                          : std::min(kTarget / std::max(m_envelope, 1e-4f), kMaxGain);
                 m_gain += (desired - m_gain) * kGainEase;
                 // tanh keeps a transient inside the range instead of wrapping it.
                 samples[i] = static_cast<qint16>(std::tanh(x * m_gain) * 32767.0f);
@@ -31,10 +36,12 @@ namespace OpenPods::HiRes
 
     private:
         static constexpr float kTarget = 0.25f;   // about -12 dBFS
-        static constexpr float kMaxGain = 8.0f;   // about +18 dB
+        static constexpr float kMaxGain = 4.0f;   // about +12 dB
+        static constexpr float kGate = 0.01f;     // about -40 dBFS, under which nothing is lifted
         static constexpr float kAttack = 0.02f;
-        static constexpr float kRelease = 0.001f;
-        static constexpr float kGainEase = 0.01f;
+        // Slow enough to hold through the gaps between syllables, so a sentence keeps one gain.
+        static constexpr float kRelease = 0.0002f;
+        static constexpr float kGainEase = 0.002f;
 
         float m_envelope = 0.0f;
         float m_gain = 1.0f;
