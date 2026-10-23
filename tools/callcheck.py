@@ -36,6 +36,36 @@ def run(args: list[str], timeout: float = 5.0) -> str:
     return done.stdout if done.returncode == 0 else ""
 
 
+def write_piano_loop(path: Path) -> None:
+    """A four-note arpeggio, each note alternating left and right.
+
+    Synthesised rather than shipped so there is no audio file in the repo, and
+    the alternation is what makes a dead channel obvious.
+    """
+    rate = 48000
+    notes = [261.63, 329.63, 392.00, 523.25]  # C4 E4 G4 C5
+    seconds = 0.6
+    frames = bytearray()
+    for index, freq in enumerate(notes):
+        for n in range(int(rate * seconds)):
+            t = n / rate
+            # A struck string: a few harmonics that decay, the higher ones faster.
+            value = sum(
+                math.sin(2 * math.pi * freq * h * t) * (0.6 ** (h - 1)) * math.exp(-t * (2.5 + h))
+                for h in (1, 2, 3)
+            )
+            sample = int(max(-1.0, min(1.0, value * 0.5)) * 32767)
+            left = sample if index % 2 == 0 else 0
+            right = sample if index % 2 == 1 else 0
+            frames += int(left).to_bytes(2, "little", signed=True)
+            frames += int(right).to_bytes(2, "little", signed=True)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(bytes(frames))
+
+
 @dataclass
 class Readiness:
     default_source: str
@@ -187,9 +217,16 @@ class CallCheck(QWidget):
         self.record_button.clicked.connect(self.record_and_play)
         self.fix_button = QPushButton("Use the AirPods mic")
         self.fix_button.clicked.connect(self.use_hires)
+        self.play_button = QPushButton("Play piano loop")
+        self.play_button.setCheckable(True)
+        self.play_button.toggled.connect(self.toggle_piano)
+        self._piano = QProcess(self)
+        self._piano.finished.connect(self._piano_finished)
+        self._piano_file: Path | None = None
 
         buttons = QHBoxLayout()
         buttons.addWidget(self.record_button)
+        buttons.addWidget(self.play_button)
         buttons.addWidget(self.fix_button)
 
         layout = QVBoxLayout(self)
@@ -229,6 +266,32 @@ class CallCheck(QWidget):
         ]
         self.detail.setText("\n".join(lines + [""] + [f"- {p}" for p in problems]))
         self.fix_button.setEnabled(state.hires_published and state.default_source != HIRES_SOURCE)
+
+    def toggle_piano(self, playing: bool) -> None:
+        if not playing:
+            self.play_button.setText("Play piano loop")
+            self._piano.kill()
+            return
+        if self._piano_file is None:
+            self._piano_file = Path(NamedTemporaryFile(suffix=".wav", delete=False).name)
+            write_piano_loop(self._piano_file)
+        self.play_button.setText("Stop (left, right, left, right)")
+        self._start_piano()
+
+    def _start_piano(self) -> None:
+        if self._piano_file is not None:
+            self._piano.start("pw-play", ["--", str(self._piano_file)])
+
+    # Restarting on exit is the loop: pw-play has no repeat of its own.
+    def _piano_finished(self) -> None:
+        if self.play_button.isChecked():
+            self._start_piano()
+
+    def closeEvent(self, event) -> None:
+        self._piano.kill()
+        if self._piano_file is not None:
+            self._piano_file.unlink(missing_ok=True)
+        super().closeEvent(event)
 
     def use_hires(self) -> None:
         subprocess.run(["pactl", "set-default-source", HIRES_SOURCE], capture_output=True)
