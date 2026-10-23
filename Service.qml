@@ -37,6 +37,7 @@ Item {
   property string actionStatus: ""
 
   readonly property string ctlPath: String(setting("ctlPath", "") || "librepods-ctl")
+  readonly property string callCheckPath: String(setting("callCheckPath", "") || "airpods-callcheck")
   readonly property bool busy: commandProcess.running
   // The daemon publishes here on change, so there is nothing to poll.
   readonly property string statePath: (Quickshell.env("XDG_STATE_HOME")
@@ -181,6 +182,12 @@ Item {
     _send("adaptive:" + clamped, "adaptiveNoiseLevel", clamped)
   }
 
+  // setsid detaches it, so the window outlives the popup that opened it.
+  function launchCallCheck() {
+    launchProcess.command = ["setsid", "-f", callCheckPath]
+    launchProcess.running = true
+  }
+
   function setHiResMic(enabled) {
     _send(enabled ? "mic:on" : "mic:off", "hiResMicEnabled", enabled)
   }
@@ -226,6 +233,12 @@ Item {
     onFileChanged: reload()
     onLoaded: root.applyLine(text())
     onLoadFailed: root.stateGone()
+  }
+
+  Process {
+    id: launchProcess
+    running: false
+    command: []
   }
 
   Process {

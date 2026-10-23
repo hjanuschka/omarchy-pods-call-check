@@ -114,6 +114,12 @@ install(FILES assets/me.kavishdevar.librepods.desktop
 install(FILES assets/librepods.svg
     DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps")
 # With the documented --prefix ~/.local this lands in ~/.local/share/systemd/user, which systemd searches.
+# The call check ships with the plugin so the popup can launch it by name.
+install(PROGRAMS ../tools/callcheck.py
+    DESTINATION bin
+    RENAME airpods-callcheck
+)
+
 install(FILES librepods.service
     DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/systemd/user")
 

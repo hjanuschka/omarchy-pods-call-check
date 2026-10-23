@@ -69,6 +69,7 @@ Panel {
     if (caVisible) rows.push("ca")
     if (oneBudVisible) rows.push("onebud")
     if (hiResMicVisible) rows.push("mic")
+    if (hiResMicVisible) rows.push("callcheck")
     rows.push("ear")
     return rows
   }
@@ -96,6 +97,7 @@ Panel {
     if (name.indexOf("mode:") === 0) pods.setNoiseMode(parseInt(name.substring(5), 10))
     else if (name === "ca") pods.setConversationalAwareness(!pods.conversationalAwareness)
     else if (name === "mic") pods.setHiResMic(!pods.hiResMicEnabled)
+    else if (name === "callcheck") pods.launchCallCheck()
     else if (name === "onebud") pods.setOneBudANC(!pods.oneBudANC)
     else if (name === "ear") pods.cycleEarDetection()
   }
@@ -371,6 +373,16 @@ Panel {
               rowName: "ear"
               label: "Ear detection"
               value: Model.earDetectionName(pods.earDetectionBehavior)
+              onActivated: pods.cycleEarDetection()
+            }
+
+            ValueRow {
+              visible: root.hiResMicVisible
+              width: parent.width
+              rowName: "callcheck"
+              label: "Check audio for a call"
+              value: "Open"
+              onActivated: pods.launchCallCheck()
             }
           }
 
@@ -604,6 +616,7 @@ Panel {
     property string rowName: ""
     property string label: ""
     property string value: ""
+    signal activated()
 
     hasCursor: root.rowHasCursor(rowName)
     foreground: root.foreground
@@ -614,7 +627,7 @@ Panel {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onEntered: root.focusRow(valueRow.rowName)
-      onClicked: pods.cycleEarDetection()
+      onClicked: valueRow.activated()
     }
 
     RowLayout {
