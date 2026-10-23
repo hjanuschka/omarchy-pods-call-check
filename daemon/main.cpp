@@ -140,6 +140,7 @@ public:
         // Load settings
         CrossDevice.isEnabled = loadCrossDeviceEnabled();
         setEarDetectionBehavior(loadEarDetectionSettings());
+        m_hiResMicEnabled = m_settings->value("hiresMic/enabled", true).toBool();
         setRetryAttempts(loadRetryAttempts());
         // Restore persisted PhoneMAC into the process env BEFORE
         // connectToPhone() reads it. setPhoneMac persists to QSettings
@@ -405,13 +406,34 @@ public slots:
         m_hiResUnits = 0;
         m_hiResTailBytes = 0;
         socket->write(enabled ? start : stop);
+        emit airPodsStatusChanged();
         LOG_INFO("Hi-res mic " << (enabled ? "armed" : "disarmed"));
+    }
+
+    // The panel switch. Off tears the source down, so no app can select a mic that is not there.
+    void setHiResMicUserEnabled(bool enabled)
+    {
+        if (m_hiResMicEnabled == enabled) {
+            return;
+        }
+        m_hiResMicEnabled = enabled;
+        m_settings->setValue("hiresMic/enabled", enabled);
+        if (enabled) {
+            startHiResMicSource();
+        } else {
+            stopHiResMicSource();
+        }
+        emit airPodsStatusChanged();
+        LOG_INFO("Hi-res mic " << (enabled ? "enabled" : "disabled") << " by request");
     }
 
     // The source is published for as long as the pods are connected, so an app can pick it
     // before anything is streaming; the radio stream itself follows the recorder.
     void startHiResMicSource()
     {
+        if (!m_hiResMicEnabled) {
+            return;
+        }
         if (m_hiResMic.isRunning() || !m_hiResMic.start()) {
             return;
         }
@@ -1721,6 +1743,7 @@ signals:
 
 private:
     HiResMic m_hiResMic;
+    bool m_hiResMicEnabled = true;
     QTimer *m_hiResMonitor = nullptr;
     bool m_hiResMicArmed = false;
     quint64 m_hiResSdus = 0;
@@ -1867,6 +1890,11 @@ public:
         // 0 = PauseWhenOneRemoved, 1 = PauseWhenBothRemoved,
         // 2 = Disabled (matches MediaController::EarDetectionBehavior).
         status.insert("ear_detection_behavior", earDetectionBehavior());
+        // The uplink is offered once its source is published, which needs the decoder this
+        // build was compiled against; enabled is the user's switch, active means it streams.
+        status.insert("supports_hires_mic", m_hiResMic.isRunning() || m_hiResMicEnabled);
+        status.insert("hires_mic_enabled", m_hiResMicEnabled);
+        status.insert("hires_mic_active", m_hiResMicArmed);
         // 0 = open, 1 = closed, 2 = unknown (matches BleInfo::LidState).
         status.insert("lid_state", lidState());
         return status;
@@ -2180,9 +2208,9 @@ int main(int argc, char *argv[]) {
                     trayAppPtr->loadMainModule();
                 }
             } else if (msg == "mic:on") {
-                trayAppPtr->setHiResMicEnabled(true);
+                trayAppPtr->setHiResMicUserEnabled(true);
             } else if (msg == "mic:off") {
-                trayAppPtr->setHiResMicEnabled(false);
+                trayAppPtr->setHiResMicUserEnabled(false);
             } else if (msg == "noise:off") {
                 trayAppPtr->setNoiseControlModeInt(0);
             } else if (msg == "noise:anc") {

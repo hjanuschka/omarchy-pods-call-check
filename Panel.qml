@@ -51,6 +51,7 @@ Panel {
   readonly property bool modesVisible: pods.hasAirPods && modes.length > 0
   readonly property bool caVisible: pods.hasAirPods && pods.supportsConversationalAwareness
   readonly property bool oneBudVisible: pods.hasAirPods && pods.supportsOneBudANC
+  readonly property bool hiResMicVisible: pods.hasAirPods && pods.supportsHiResMic
   readonly property string lidLabel: Model.lidText(pods.lidState)
 
   // The daemon names the family, so the mark is the shape of the device actually connected.
@@ -67,6 +68,7 @@ Panel {
     if (adaptiveVisible) rows.push("adaptive")
     if (caVisible) rows.push("ca")
     if (oneBudVisible) rows.push("onebud")
+    if (hiResMicVisible) rows.push("mic")
     rows.push("ear")
     return rows
   }
@@ -93,6 +95,7 @@ Panel {
     var name = cursorRow
     if (name.indexOf("mode:") === 0) pods.setNoiseMode(parseInt(name.substring(5), 10))
     else if (name === "ca") pods.setConversationalAwareness(!pods.conversationalAwareness)
+    else if (name === "mic") pods.setHiResMic(!pods.hiResMicEnabled)
     else if (name === "onebud") pods.setOneBudANC(!pods.oneBudANC)
     else if (name === "ear") pods.cycleEarDetection()
   }
@@ -183,6 +186,7 @@ Panel {
         else if (key === "n") pods.setNoiseMode(Model.NOISE_ANC)
         else if (key === "a") pods.setNoiseMode(Model.NOISE_ADAPTIVE)
         else if (key === "c" && pods.supportsConversationalAwareness) pods.setConversationalAwareness(!pods.conversationalAwareness)
+        else if (key === "m" && root.hiResMicVisible) pods.setHiResMic(!pods.hiResMicEnabled)
         else if (key === "b" && pods.supportsOneBudANC) pods.setOneBudANC(!pods.oneBudANC)
         else if (key === "e") pods.cycleEarDetection()
       }
@@ -307,7 +311,7 @@ Panel {
           }
 
           PanelSeparator {
-            visible: root.caVisible || root.oneBudVisible
+            visible: root.caVisible || root.oneBudVisible || root.hiResMicVisible
             foreground: root.foreground
           }
 
@@ -324,6 +328,21 @@ Panel {
               caption: "Lower the volume when you start talking"
               checked: pods.conversationalAwareness
               onToggled: pods.setConversationalAwareness(!pods.conversationalAwareness)
+            }
+
+            ToggleRow {
+              visible: root.hiResMicVisible
+              width: parent.width
+              rowName: "mic"
+              label: "AirPods microphone"
+              // The caption is the display: it says whether a call is on the pods right now.
+              caption: pods.hiResMicActive
+                       ? "In use now, 64 kHz, music keeps playing"
+                       : (pods.hiResMicEnabled
+                          ? "Pick \"AirPodsHiRes\" as your microphone"
+                          : "Off, so calls take another microphone")
+              checked: pods.hiResMicEnabled
+              onToggled: pods.setHiResMic(!pods.hiResMicEnabled)
             }
 
             ToggleRow {

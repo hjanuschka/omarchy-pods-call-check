@@ -23,6 +23,9 @@ Item {
   property int adaptiveNoiseLevel: 0
   property bool oneBudANC: false
   property bool conversationalAwareness: false
+  property bool supportsHiResMic: false
+  property bool hiResMicEnabled: false
+  property bool hiResMicActive: false
   property int earDetectionBehavior: Model.EAR_PAUSE_ONE_OUT
   property int lidState: Model.LID_UNKNOWN
   property bool schemaUnsupported: false
@@ -114,6 +117,10 @@ Item {
     adaptiveNoiseLevel = _settle("adaptiveNoiseLevel", status.adaptiveNoiseLevel)
     oneBudANC = _settle("oneBudANC", status.oneBudANC)
     conversationalAwareness = _settle("conversationalAwareness", status.conversationalAwareness)
+    supportsHiResMic = status.supportsHiResMic
+    hiResMicEnabled = _settle("hiResMicEnabled", status.hiResMicEnabled)
+    // Reported by the daemon as the stream starts and stops, so it is never optimistic.
+    hiResMicActive = status.hiResMicActive
     earDetectionBehavior = _settle("earDetectionBehavior", status.earDetectionBehavior)
   }
 
@@ -172,6 +179,10 @@ Item {
   function setAdaptiveNoiseLevel(level) {
     var clamped = Math.max(0, Math.min(100, Math.round(level)))
     _send("adaptive:" + clamped, "adaptiveNoiseLevel", clamped)
+  }
+
+  function setHiResMic(enabled) {
+    _send(enabled ? "mic:on" : "mic:off", "hiResMicEnabled", enabled)
   }
 
   function setConversationalAwareness(enabled) {
