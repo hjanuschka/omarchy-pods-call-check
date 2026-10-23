@@ -32,6 +32,7 @@
 #include "airpods_packets.h"
 #include "logger.h"
 #include "media/hiresframe.hpp"
+#include "media/hiresmic.h"
 #include "media/mediacontroller.h"
 #include "trayiconmanager.h"
 #include "notifier.hpp"
@@ -392,6 +393,13 @@ public slots:
             LOG_WARN("Refusing hi-res mic " << (enabled ? "arm" : "disarm") << ": no control link");
             return;
         }
+        if (enabled && !m_hiResMic.start()) {
+            LOG_ERROR("Refusing hi-res mic arm: decoder or source unavailable");
+            return;
+        }
+        if (!enabled) {
+            m_hiResMic.stop();
+        }
         m_hiResMicArmed = enabled;
         m_hiResSdus = 0;
         m_hiResUnits = 0;
@@ -404,16 +412,18 @@ public slots:
     void handleHiResAudio(const QByteArray &sdu)
     {
         qsizetype consumed = OpenPods::HiRes::kSduHeaderLen;
-        const int units = OpenPods::HiRes::demuxAudioUnits(sdu, [&consumed](QByteArrayView au) {
+        const int units = OpenPods::HiRes::demuxAudioUnits(sdu, [this, &consumed](QByteArrayView au) {
             consumed += OpenPods::HiRes::kAuPrefixLen + au.size();
+            m_hiResMic.decode(au);
         });
         ++m_hiResSdus;
         m_hiResUnits += units;
         m_hiResTailBytes += sdu.size() - consumed;
         if (m_hiResSdus % 100 == 0) {
             LOG_INFO("Hi-res mic: " << m_hiResSdus << " SDUs, " << m_hiResUnits
-                     << " access units, " << m_hiResTailBytes << " bytes left unparsed, last SDU "
-                     << sdu.size() << " bytes");
+                     << " access units, " << m_hiResMic.framesDecoded() << " frames decoded, "
+                     << m_hiResMic.decodeErrors() << " errors, " << m_hiResTailBytes
+                     << " bytes left unparsed");
         }
     }
 
@@ -1666,6 +1676,7 @@ signals:
     void hearingAidEnabledChanged(bool enabled);
 
 private:
+    HiResMic m_hiResMic;
     bool m_hiResMicArmed = false;
     quint64 m_hiResSdus = 0;
     quint64 m_hiResUnits = 0;
