@@ -25,79 +25,68 @@ static double rms(const QList<qint16> &samples)
     return std::sqrt(sum / samples.size());
 }
 
-class TestAgc : public QObject
+class TestPreamp : public QObject
 {
     Q_OBJECT
 
 private slots:
-    void liftsSpeechTowardsTheTarget();
-    void leavesTheNoiseFloorAlone();
-    void doesNotLiftAnAlreadyLoudFrame();
-    void neverExceedsItsGainCeiling();
+    void liftsAVoiceThatSitsNearTheRoomLevel();
+    void leavesSilenceSilent();
     void keepsLoudInputInRange();
+    void preservesTheGapBetweenAVoiceAndTheRoom();
 };
 
-void TestAgc::liftsSpeechTowardsTheTarget()
+void TestPreamp::liftsAVoiceThatSitsNearTheRoomLevel()
 {
-    // The measured uplink sits far below the target, which is the whole reason this exists.
-    QList<qint16> speech = tone(0.05);
-    const double before = rms(speech);
-    Agc agc;
-    for (int frame = 0; frame < 40; ++frame) {
-        speech = tone(0.05);
-        agc.process(speech.data(), speech.size());
-    }
-    QVERIFY2(rms(speech) > before * 2.0, "speech should end up louder");
-    QVERIFY(agc.gain() > 1.0f);
+    // Measured on the uplink: a voice arrives near -51 dBFS and must reach the level the
+    // suppressor downstream was trained on.
+    QList<qint16> voice = tone(0.003);
+    const double before = rms(voice);
+    Preamp preamp;
+    preamp.process(voice.data(), voice.size());
+    // Tied to the constant rather than a copy of it, so retuning the preamp does not quietly
+    // invalidate this. The limiter costs a little, hence the margin.
+    QVERIFY2(rms(voice) > before * Preamp::gain() * 0.8,
+             qPrintable(QStringLiteral("a quiet voice went from %1 to %2, gain is %3")
+                            .arg(before).arg(rms(voice)).arg(Preamp::gain())));
 }
 
-void TestAgc::leavesTheNoiseFloorAlone()
+void TestPreamp::leavesSilenceSilent()
 {
-    // Measured on the device: silence came back at the same level as speech, because the gain
-    // rode up to its ceiling whenever nobody was talking and lifted the fans with it.
-    QList<qint16> room = tone(0.004);
-    const double before = rms(room);
-    Agc agc;
-    for (int frame = 0; frame < 200; ++frame) {
-        room = tone(0.004);
-        agc.process(room.data(), room.size());
+    QList<qint16> silence(kEldFrameSamples, 0);
+    Preamp preamp;
+    preamp.process(silence.data(), silence.size());
+    for (qint16 s : silence) {
+        QCOMPARE(s, qint16(0));
     }
-    QVERIFY2(rms(room) < before * 1.5,
-             qPrintable(QStringLiteral("room tone was lifted from %1 to %2").arg(before).arg(rms(room))));
 }
 
-void TestAgc::doesNotLiftAnAlreadyLoudFrame()
-{
-    Agc agc;
-    QList<qint16> loud;
-    for (int frame = 0; frame < 40; ++frame) {
-        loud = tone(0.5);
-        agc.process(loud.data(), loud.size());
-    }
-    QVERIFY2(agc.gain() < 2.0f, "a loud frame needs little gain");
-}
-
-void TestAgc::neverExceedsItsGainCeiling()
-{
-    // Silence drives the desired gain towards its clamp, which must hold.
-    Agc agc;
-    for (int frame = 0; frame < 2000; ++frame) {
-        QList<qint16> silence(kEldFrameSamples, 0);
-        agc.process(silence.data(), silence.size());
-    }
-    QVERIFY(agc.gain() <= 8.0f);
-}
-
-void TestAgc::keepsLoudInputInRange()
+void TestPreamp::keepsLoudInputInRange()
 {
     // Without the limiter a gained transient wraps sign, which is audible as a click.
-    Agc agc;
     QList<qint16> full = tone(0.99);
-    agc.process(full.data(), full.size());
+    Preamp preamp;
+    preamp.process(full.data(), full.size());
     for (qint16 s : full) {
         QVERIFY(s >= -32767 && s <= 32767);
     }
 }
 
-QTEST_GUILESS_MAIN(TestAgc)
+void TestPreamp::preservesTheGapBetweenAVoiceAndTheRoom()
+{
+    // A tracked gain closed this gap to about 2 dB, which left the suppressor unable to tell a
+    // voice from the fans. A fixed gain must not.
+    QList<qint16> voice = tone(0.003);
+    QList<qint16> room = tone(0.001);
+    const double gapBefore = 20 * std::log10(rms(voice) / rms(room));
+    Preamp preamp;
+    preamp.process(voice.data(), voice.size());
+    Preamp other;
+    other.process(room.data(), room.size());
+    const double gapAfter = 20 * std::log10(rms(voice) / rms(room));
+    QVERIFY2(std::fabs(gapAfter - gapBefore) < 1.0,
+             qPrintable(QStringLiteral("gap moved from %1 dB to %2 dB").arg(gapBefore).arg(gapAfter)));
+}
+
+QTEST_GUILESS_MAIN(TestPreamp)
 #include "tst_agc.moc"

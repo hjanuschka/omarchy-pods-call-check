@@ -43,7 +43,7 @@ private:
     AVPacket *m_pkt = nullptr;
     int m_fifo = -1;
     unsigned m_module = 0;
-    OpenPods::HiRes::Agc m_agc;
+    OpenPods::HiRes::Preamp m_preamp;
     quint64 m_frames = 0;
     quint64 m_errors = 0;
 };

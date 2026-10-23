@@ -271,7 +271,16 @@ class CallCheck(QWidget):
         ]
         self.detail.setText("\n".join(lines + [""] + [f"- {p}" for p in problems]))
         best = CLEAN_SOURCE if state.clean_published else HIRES_SOURCE
-        self.fix_button.setEnabled(state.hires_published and state.default_source != best)
+        if not state.hires_published:
+            self.fix_button.setText("AirPods mic unavailable")
+            self.fix_button.setEnabled(False)
+        elif state.default_source == best:
+            # Enabled on purpose: a disabled button reads as broken rather than as nothing to do.
+            self.fix_button.setText(f"Mic is {best}")
+            self.fix_button.setEnabled(True)
+        else:
+            self.fix_button.setText(f"Switch to {best}")
+            self.fix_button.setEnabled(True)
 
     def toggle_piano(self, playing: bool) -> None:
         if not playing:

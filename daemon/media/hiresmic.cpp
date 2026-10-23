@@ -171,7 +171,7 @@ void HiResMic::decode(QByteArrayView accessUnit)
         for (int i = 0; i < samples; ++i) {
             out[i] = OpenPods::HiRes::floatToS16(in[i]);
         }
-        m_agc.process(out, samples);
+        m_preamp.process(out, samples);
         // A reader that stopped draining must not stall the control link, so a full pipe drops.
         const ssize_t written = ::write(m_fifo, pcm.constData(), pcm.size());
         if (written < 0 && errno != EAGAIN) {
