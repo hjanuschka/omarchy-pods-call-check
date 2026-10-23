@@ -34,6 +34,11 @@ openpods_add_test(tst_capturematch
     ../media/capturematch.hpp
 )
 
+openpods_add_test(tst_hiresframe
+    tst_hiresframe.cpp
+    ../media/hiresframe.hpp
+)
+
 openpods_add_test(tst_profilechoice
     tst_profilechoice.cpp
     ../media/profilechoice.hpp
