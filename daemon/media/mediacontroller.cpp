@@ -116,6 +116,11 @@ void MediaController::handleEarDetection(EarDetection *earDetection)
   }
 }
 
+CaptureState MediaController::captureStateForSource(const QString &sourceName)
+{
+  return m_pulseAudio->captureStateForSource(sourceName);
+}
+
 void MediaController::setEarDetectionBehavior(EarDetectionBehavior behavior)
 {
   if (earDetectionBehavior == behavior)

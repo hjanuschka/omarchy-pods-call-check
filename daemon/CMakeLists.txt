@@ -29,6 +29,7 @@ qt_add_executable(librepods
     media/hiresmic.h
     media/hiresframe.hpp
     media/eldpcm.hpp
+    media/agc.hpp
     airpods_packets.h
     trayiconmanager.cpp
     trayiconmanager.h

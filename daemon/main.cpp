@@ -393,12 +393,12 @@ public slots:
             LOG_WARN("Refusing hi-res mic " << (enabled ? "arm" : "disarm") << ": no control link");
             return;
         }
-        if (enabled && !m_hiResMic.start()) {
-            LOG_ERROR("Refusing hi-res mic arm: decoder or source unavailable");
+        if (m_hiResMicArmed == enabled) {
             return;
         }
-        if (!enabled) {
-            m_hiResMic.stop();
+        if (enabled && !m_hiResMic.isRunning()) {
+            LOG_WARN("Refusing hi-res mic arm: no source published");
+            return;
         }
         m_hiResMicArmed = enabled;
         m_hiResSdus = 0;
@@ -406,6 +406,48 @@ public slots:
         m_hiResTailBytes = 0;
         socket->write(enabled ? start : stop);
         LOG_INFO("Hi-res mic " << (enabled ? "armed" : "disarmed"));
+    }
+
+    // The source is published for as long as the pods are connected, so an app can pick it
+    // before anything is streaming; the radio stream itself follows the recorder.
+    void startHiResMicSource()
+    {
+        if (m_hiResMic.isRunning() || !m_hiResMic.start()) {
+            return;
+        }
+        if (!m_hiResMonitor) {
+            m_hiResMonitor = new QTimer(this);
+            m_hiResMonitor->setInterval(1000);
+            connect(m_hiResMonitor, &QTimer::timeout, this, &AirPodsTrayApp::pollHiResRecorder);
+        }
+        m_hiResMonitor->start();
+    }
+
+    void stopHiResMicSource()
+    {
+        if (m_hiResMonitor) {
+            m_hiResMonitor->stop();
+        }
+        if (m_hiResMicArmed) {
+            setHiResMicEnabled(false);
+        }
+        m_hiResMic.stop();
+    }
+
+    // Unknown is not evidence of a recorder, so it neither arms nor disarms.
+    void pollHiResRecorder()
+    {
+        if (!m_hiResMic.isRunning()) {
+            return;
+        }
+        const CaptureState state = mediaController->captureStateForSource("AirPodsHiRes");
+        if (state == CaptureState::Live && !m_hiResMicArmed) {
+            LOG_INFO("Hi-res mic: a recorder appeared, arming");
+            setHiResMicEnabled(true);
+        } else if (state == CaptureState::Idle && m_hiResMicArmed) {
+            LOG_INFO("Hi-res mic: no recorder left, disarming");
+            setHiResMicEnabled(false);
+        }
     }
 
     // Audio arrives on the control socket, so it is counted here rather than parsed as a packet.
@@ -1197,6 +1239,7 @@ private slots:
             QMetaObject::invokeMethod(this, "parseData", Qt::QueuedConnection, Q_ARG(QByteArray, data));
             QMetaObject::invokeMethod(this, "relayPacketToPhone", Qt::QueuedConnection, Q_ARG(QByteArray, data)); });
             sendHandshake();
+            startHiResMicSource();
         };
 
         // Error handler with retry. Per-device member instead of static so
@@ -1261,6 +1304,7 @@ private slots:
                         }
                         return;
                     }
+                    stopHiResMicSource();
                     handleControlSocketLoss(device, localSocket,
                                             QStringLiteral("socket disconnected"));
                 });
@@ -1677,6 +1721,7 @@ signals:
 
 private:
     HiResMic m_hiResMic;
+    QTimer *m_hiResMonitor = nullptr;
     bool m_hiResMicArmed = false;
     quint64 m_hiResSdus = 0;
     quint64 m_hiResUnits = 0;
