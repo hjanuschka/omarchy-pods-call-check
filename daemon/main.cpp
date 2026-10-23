@@ -31,6 +31,7 @@
 
 #include "airpods_packets.h"
 #include "logger.h"
+#include "media/hiresframe.hpp"
 #include "media/mediacontroller.h"
 #include "trayiconmanager.h"
 #include "notifier.hpp"
@@ -381,6 +382,41 @@ public slots:
         writePacketToSocket(packet, "Noise control mode packet written: ");
         ++m_noiseControlChangesTotal;
     }
+    // The AirPods stream their high-resolution microphone only while armed. Both packets carry
+    // the 04 00 04 00 AACP header and message type 0x58, the same type as the audio frames.
+    void setHiResMicEnabled(bool enabled)
+    {
+        static const QByteArray start = QByteArray::fromHex("04000400580000000900000182000000049600");
+        static const QByteArray stop = QByteArray::fromHex("040004005800000002000301");
+        if (!socket || socket->state() != QBluetoothSocket::SocketState::ConnectedState) {
+            LOG_WARN("Refusing hi-res mic " << (enabled ? "arm" : "disarm") << ": no control link");
+            return;
+        }
+        m_hiResMicArmed = enabled;
+        m_hiResSdus = 0;
+        m_hiResUnits = 0;
+        m_hiResTailBytes = 0;
+        socket->write(enabled ? start : stop);
+        LOG_INFO("Hi-res mic " << (enabled ? "armed" : "disarmed"));
+    }
+
+    // Audio arrives on the control socket, so it is counted here rather than parsed as a packet.
+    void handleHiResAudio(const QByteArray &sdu)
+    {
+        qsizetype consumed = OpenPods::HiRes::kSduHeaderLen;
+        const int units = OpenPods::HiRes::demuxAudioUnits(sdu, [&consumed](QByteArrayView au) {
+            consumed += OpenPods::HiRes::kAuPrefixLen + au.size();
+        });
+        ++m_hiResSdus;
+        m_hiResUnits += units;
+        m_hiResTailBytes += sdu.size() - consumed;
+        if (m_hiResSdus % 100 == 0) {
+            LOG_INFO("Hi-res mic: " << m_hiResSdus << " SDUs, " << m_hiResUnits
+                     << " access units, " << m_hiResTailBytes << " bytes left unparsed, last SDU "
+                     << sdu.size() << " bytes");
+        }
+    }
+
     void setNoiseControlModeInt(int mode)
     {
         if (mode < 0 || mode > static_cast<int>(NoiseControlMode::Adaptive))
@@ -1144,6 +1180,10 @@ private slots:
             connect(localSocket, &QBluetoothSocket::readyRead, this, [this, localSocket]()
                     {
             QByteArray data = localSocket->readAll();
+            if (OpenPods::HiRes::isAudioSdu(data)) {
+                handleHiResAudio(data);
+                return;
+            }
             QMetaObject::invokeMethod(this, "parseData", Qt::QueuedConnection, Q_ARG(QByteArray, data));
             QMetaObject::invokeMethod(this, "relayPacketToPhone", Qt::QueuedConnection, Q_ARG(QByteArray, data)); });
             sendHandshake();
@@ -1626,6 +1666,10 @@ signals:
     void hearingAidEnabledChanged(bool enabled);
 
 private:
+    bool m_hiResMicArmed = false;
+    quint64 m_hiResSdus = 0;
+    quint64 m_hiResUnits = 0;
+    qint64 m_hiResTailBytes = 0;
     QBluetoothSocket *socket = nullptr;
     QBluetoothSocket *phoneSocket = nullptr;
     QByteArray lastBatteryStatus;
@@ -2079,6 +2123,10 @@ int main(int argc, char *argv[]) {
                 } else {
                     trayAppPtr->loadMainModule();
                 }
+            } else if (msg == "mic:on") {
+                trayAppPtr->setHiResMicEnabled(true);
+            } else if (msg == "mic:off") {
+                trayAppPtr->setHiResMicEnabled(false);
             } else if (msg == "noise:off") {
                 trayAppPtr->setNoiseControlModeInt(0);
             } else if (msg == "noise:anc") {
